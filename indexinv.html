@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投資組合模擬器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; max-width: 820px; margin: 0 auto; }
+  h2 { text-align: center; color: #f5c842; font-size: 18px; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; font-size: 11px; margin-bottom: 16px; }
+  .section { background: #1a1d2e; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .section h3 { color: #f5c842; font-size: 13px; margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  label { font-size: 12px; color: #aaa; min-width: 110px; }
+  input[type=range] { flex: 1; accent-color: #f5c842; min-width: 100px; }
+  .val { color: #f5c842; font-weight: bold; min-width: 70px; font-size: 13px; }
+  .toggle-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggle-btn { padding: 5px 13px; border-radius: 20px; border: 1px solid #444; background: #1a1d2e; color: #aaa; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+  .toggle-btn.active { background: #f5c842; color: #000; border-color: #f5c842; font-weight: bold; }
+
+  /* Allocation grid - level 1 */
+  .alloc-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .alloc-item { background: #0f1117; border-radius: 10px; padding: 12px 8px; text-align: center; border: 1px solid #2a2d3e; }
+  .alloc-item .ticker { font-size: 13px; font-weight: bold; color: #f5c842; margin-bottom: 6px; }
+  .alloc-item input[type=range] { width: 100%; min-width: unset; margin: 6px 0; }
+  .alloc-item .pct-val { font-size: 13px; color: #e0e0e0; font-weight: bold; }
+  .alloc-item .ret-note { font-size: 10px; color: #555; margin-top: 3px; }
+  .alloc-warn { font-size: 11px; text-align: center; margin-top: 8px; min-height: 16px; }
+  .alloc-warn.ok { color: #4caf50; }
+  .alloc-warn.err { color: #f44336; }
+  .weighted-return { font-size: 12px; color: #aaa; text-align: center; margin-top: 8px; }
+  .weighted-return span { color: #f5c842; font-weight: bold; }
+
+  /* Sub-split for 0050/00662 */
+  .sub-split { background: #0f1117; border-radius: 10px; padding: 12px; margin-top: 10px; border: 1px dashed #2a2d3e; }
+  .sub-split-title { font-size: 11px; color: #888; margin-bottom: 8px; text-align: center; }
+  .sub-row { display: flex; align-items: center; gap: 10px; }
+  .sub-row .name { font-size: 12px; color: #ccc; min-width: 55px; }
+  .sub-row input[type=range] { flex: 1; }
+  .sub-row .sub-pct { font-size: 12px; color: #f5c842; font-weight: bold; min-width: 55px; text-align: right; }
+
+  /* Results */
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .card { background: #1a1d2e; border-radius: 12px; padding: 16px; border: 1px solid #2a2d3e; }
+  .card.highlight { border-color: #f5c842; }
+  .card.green { border-color: #4caf50; }
+  .card h4 { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+  .card .big { font-size: 22px; font-weight: bold; color: #f5c842; }
+  .card .big.green { color: #4caf50; }
+  .card .sub { font-size: 11px; color: #666; margin-top: 4px; }
+  .card .diff { font-size: 12px; color: #4caf50; margin-top: 6px; }
+  .span2 { grid-column: span 2; }
+
+  canvas { width: 100%; border-radius: 8px; background: #1a1d2e; display: block; }
+  .legend { display: flex; gap: 16px; justify-content: center; margin: 8px 0; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .year-detail { background: #1a1d2e; border-radius: 12px; padding: 14px; margin-top: 12px; }
+  .year-detail h3 { color: #f5c842; font-size: 13px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { color: #888; padding: 6px 8px; text-align: right; border-bottom: 1px solid #2a2d3e; }
+  th:first-child { text-align: left; }
+  td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #111; }
+  td:first-child { text-align: left; color: #aaa; }
+  tr:hover td { background: #222; }
+  .note { font-size: 11px; color: #555; text-align: center; margin-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h2>📊 持股紀錄目標模擬器</h2>
+<div class="subtitle">0050+00662 / 00631L / 00670L / 00865B · 30年長期計畫</div>
+
+<!-- 配置比例 -->
+<div class="section">
+  <h3>🥧 大類配置比例（合計須為 100%）</h3>
+  <div class="alloc-grid">
+    <div class="alloc-item">
+      <div class="ticker">0050+00662</div>
+      <input type="range" id="wCore" min="0" max="100" value="40" step="5" oninput="onAllocChange()">
+      <div class="pct-val" id="vCore">40%</div>
+      <div class="ret-note" id="coreReturnNote">年化 ~25%</div>
+    </div>
+    <div class="alloc-item">
+      <div class="ticker">00631L</div>
+      <input type="range" id="w00631L" min="0" max="100" value="15" step="5" oninput="onAllocChange()">
+      <div class="pct-val" id="v00631L">15%</div>
+      <div class="ret-note">年化 ~35%</div>
+    </div>
+    <div class="alloc-item">
+      <div class="ticker">00670L</div>
+      <input type="range" id="w00670L" min="0" max="100" value="15" step="5" oninput="onAllocChange()">
+      <div class="pct-val" id="v00670L">15%</div>
+      <div class="ret-note">年化 ~38%</div>
+    </div>
+    <div class="alloc-item">
+      <div class="ticker">00865B</div>
+      <input type="range" id="w00865B" min="0" max="100" value="30" step="5" oninput="onAllocChange()">
+      <div class="pct-val" id="v00865B">30%</div>
+      <div class="ret-note">年化 ~3.5%</div>
+    </div>
+  </div>
+
+  <div class="sub-split">
+    <div class="sub-split-title">↳ 0050 / 00662 內部比例（未來新買進主力轉向 00662）</div>
+    <div class="sub-row">
+      <div class="name">0050</div>
+      <input type="range" id="wInner0050" min="0" max="100" value="40" step="5" oninput="onInnerChange()">
+      <div class="sub-pct" id="vInner0050">40%</div>
+    </div>
+    <div class="sub-row" style="margin-top:6px;">
+      <div class="name">00662</div>
+      <input type="range" id="wInner00662" min="0" max="100" value="60" step="5" oninput="onInnerChange()">
+      <div class="sub-pct" id="vInner00662">60%</div>
+    </div>
+  </div>
+
+  <div class="alloc-warn" id="allocWarn"></div>
+  <div class="weighted-return">加權年化報酬率：<span id="weightedReturn">--</span></div>
+</div>
+
+<!-- 參數設定 -->
+<div class="section">
+  <h3>⚙️ 參數設定</h3>
+  <div class="row">
+    <label>每年投入（萬）</label>
+    <input type="range" id="annualInvest" min="20" max="500" value="100" step="10">
+    <span class="val" id="annualVal">100萬</span>
+  </div>
+  <div class="row">
+    <label>啟動資金（萬）</label>
+    <input type="range" id="startCapital" min="0" max="1000" value="200" step="10">
+    <span class="val" id="startVal">200萬</span>
+  </div>
+  <div class="row">
+    <label>年化報酬率</label>
+    <input type="range" id="returnRate" min="5" max="50" value="25" step="1">
+    <span class="val" id="returnVal">25%</span>
+  </div>
+  <div class="row">
+    <label>投資年限</label>
+    <input type="range" id="years" min="3" max="30" value="30" step="1">
+    <span class="val" id="yearsVal">30年</span>
+  </div>
+  <div class="row">
+    <label>投入方式</label>
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btn-lump" onclick="setMode('lump')">單筆（年初）</button>
+      <button class="toggle-btn" id="btn-dca" onclick="setMode('dca')">定期定額（月）</button>
+      <button class="toggle-btn" id="btn-both" onclick="setMode('both')">兩者比較</button>
+    </div>
+  </div>
+</div>
+
+<div class="results" id="resultsArea"></div>
+
+<canvas id="chart" height="220"></canvas>
+<div class="legend" id="legend"></div>
+
+<div class="year-detail">
+  <h3 id="tableTitle">📅 逐年累積資產明細</h3>
+  <table id="yearTable"></table>
+</div>
+
+<p class="note" id="noteText">⚠️ 0050、00865B依五年歷史數據估算，00662依五年年化29.56%估算，00631L/00670L為槓桿估算值。<br>啟動資金與每年投入皆計入複利成長，僅供參考，不代表未來實際績效。</p>
+
+<script>
+let mode = 'lump';
+// Base annual return assumptions (%)
+const BASE_0050 = 21;
+const BASE_00662 = 29.56;
+const BASE_00631L = 35;
+const BASE_00670L = 38;
+const BASE_00865B = 3.5;
+
+function setMode(m) {
+  mode = m;
+  ['lump','dca','both'].forEach(x => {
+    document.getElementById('btn-'+x).classList.toggle('active', x===m);
+  });
+  calculate();
+}
+
+function onInnerChange() {
+  // Keep two sliders summing to 100 (last touched wins, adjust the other)
+  const a = parseInt(document.getElementById('wInner0050').value);
+  document.getElementById('wInner00662').value = 100 - a;
+  document.getElementById('vInner0050').textContent = a + '%';
+  document.getElementById('vInner00662').textContent = (100-a) + '%';
+  onAllocChange();
+}
+
+function getWeights() {
+  return {
+    wCore: parseInt(document.getElementById('wCore').value),
+    w00631L: parseInt(document.getElementById('w00631L').value),
+    w00670L: parseInt(document.getElementById('w00670L').value),
+    w00865B: parseInt(document.getElementById('w00865B').value),
+  };
+}
+
+function getInner() {
+  return {
+    inner0050: parseInt(document.getElementById('wInner0050').value),
+    inner00662: parseInt(document.getElementById('wInner00662').value),
+  };
+}
+
+function getTotal(w) { return w.wCore + w.w00631L + w.w00670L + w.w00865B; }
+
+function onAllocChange() {
+  const w = getWeights();
+  const total = getTotal(w);
+  document.getElementById('vCore').textContent = w.wCore + '%';
+  document.getElementById('v00631L').textContent = w.w00631L + '%';
+  document.getElementById('v00670L').textContent = w.w00670L + '%';
+  document.getElementById('v00865B').textContent = w.w00865B + '%';
+
+  const inner = getInner();
+  const coreReturn = (inner.inner0050 * BASE_0050 + inner.inner00662 * BASE_00662) / 100;
+  document.getElementById('coreReturnNote').textContent = `年化 ~${coreReturn.toFixed(1)}%`;
+
+  const warn = document.getElementById('allocWarn');
+  if (total === 100) {
+    warn.textContent = '✓ 合計 100%';
+    warn.className = 'alloc-warn ok';
+    updateWeightedReturn(w, coreReturn);
+    calculate();
+  } else {
+    warn.textContent = `合計 ${total}%，請調整至 100%`;
+    warn.className = 'alloc-warn err';
+    document.getElementById('weightedReturn').textContent = '--';
+    document.getElementById('resultsArea').innerHTML = '';
+  }
+}
+
+function updateWeightedReturn(w, coreReturn) {
+  const wr = (
+    w.wCore * coreReturn +
+    w.w00631L * BASE_00631L +
+    w.w00670L * BASE_00670L +
+    w.w00865B * BASE_00865B
+  ) / 100;
+  document.getElementById('weightedReturn').textContent = wr.toFixed(1) + '%';
+  const slider = document.getElementById('returnRate');
+  const clamped = Math.min(50, Math.max(5, Math.round(wr)));
+  slider.value = clamped;
+  document.getElementById('returnVal').textContent = clamped + '%';
+}
+
+function fmt(n) {
+  if(n >= 10000) return (n/10000).toFixed(2)+'億';
+  if(n >= 1000) return (n/1000).toFixed(1)+'千萬';
+  return n.toFixed(1)+'萬';
+}
+
+function simulate(annualWan, rate, isDCA, yrs, startWan) {
+  const annual = annualWan * 10000;
+  let portfolio = (startWan || 0) * 10000;
+  let totalInvested = portfolio;
+  const yearData = [];
+  for(let y = 1; y <= yrs; y++) {
+    if(isDCA) {
+      const monthly = annual / 12;
+      const monthlyRate = Math.pow(1 + rate, 1/12) - 1;
+      for(let m = 0; m < 12; m++) {
+        portfolio = (portfolio + monthly) * (1 + monthlyRate);
+      }
+    } else {
+      portfolio = (portfolio + annual) * (1 + rate);
+    }
+    totalInvested += annual;
+    yearData.push({
+      year: y,
+      portfolio: portfolio / 10000,
+      totalInvested: totalInvested / 10000,
+      profit: (portfolio - totalInvested) / 10000
+    });
+  }
+  return yearData;
+}
+
+function calculate() {
+  const w = getWeights();
+  if(getTotal(w) !== 100) return;
+
+  const annualWan = parseInt(document.getElementById('annualInvest').value);
+  const startWan = parseInt(document.getElementById('startCapital').value);
+  const rate = parseInt(document.getElementById('returnRate').value) / 100;
+  const yrs = parseInt(document.getElementById('years').value);
+
+  document.getElementById('annualVal').textContent = annualWan + '萬';
+  document.getElementById('startVal').textContent = startWan + '萬';
+  document.getElementById('returnVal').textContent = (rate*100).toFixed(0) + '%';
+  document.getElementById('yearsVal').textContent = yrs + '年';
+  document.getElementById('tableTitle').textContent = `📅 逐年累積資產明細（${yrs}年）`;
+
+  const lumpData = simulate(annualWan, rate, false, yrs, startWan);
+  const dcaData = simulate(annualWan, rate, true, yrs, startWan);
+  const totalInvested = annualWan * yrs + startWan;
+  const lumpFinal = lumpData[yrs-1].portfolio;
+  const dcaFinal = dcaData[yrs-1].portfolio;
+
+  let html = '';
+  if(mode === 'lump' || mode === 'both') {
+    html += `<div class="card highlight">
+      <h4>💰 單筆投入（每年年初）</h4>
+      <div class="big">${fmt(lumpFinal)}</div>
+      <div class="sub">${yrs}年總投入：${totalInvested}萬（含啟動${startWan}萬）</div>
+      <div class="diff">獲利：+${fmt(lumpFinal - totalInvested)}（+${((lumpFinal/totalInvested-1)*100).toFixed(0)}%）</div>
+    </div>`;
+  }
+  if(mode === 'dca' || mode === 'both') {
+    html += `<div class="card">
+      <h4>📅 定期定額（每月均投）</h4>
+      <div class="big">${fmt(dcaFinal)}</div>
+      <div class="sub">${yrs}年總投入：${totalInvested}萬（含啟動${startWan}萬）</div>
+      <div class="diff">獲利：+${fmt(dcaFinal - totalInvested)}（+${((dcaFinal/totalInvested-1)*100).toFixed(0)}%）</div>
+    </div>`;
+  }
+  if(mode === 'both') {
+    const diff = lumpFinal - dcaFinal;
+    html += `<div class="card green span2">
+      <h4>📈 策略差距（${yrs}年後）</h4>
+      <div class="big green">+${fmt(diff)}</div>
+      <div class="sub">單筆投入比定期定額多賺 ${fmt(diff)}（多 ${((diff/dcaFinal)*100).toFixed(1)}%）</div>
+    </div>`;
+  }
+  document.getElementById('resultsArea').innerHTML = html;
+
+  drawChart(lumpData, dcaData, yrs);
+
+  const tableData = mode === 'dca' ? dcaData : lumpData;
+  const showBoth = mode === 'both';
+  let tHtml = `<tr><th>年份</th><th>累積投入</th>${showBoth ? '<th style="color:#f5c842">單筆資產</th><th style="color:#4fc3f7">定期定額</th>' : '<th>總資產</th><th>獲利</th>'}</tr>`;
+  for(let i=0;i<yrs;i++){
+    const l = lumpData[i], d = dcaData[i];
+    tHtml += `<tr>
+      <td>第${i+1}年</td>
+      <td>${fmt(l.totalInvested)}</td>
+      ${showBoth
+        ? `<td style="color:#f5c842">${fmt(l.portfolio)}</td><td style="color:#4fc3f7">${fmt(d.portfolio)}</td>`
+        : `<td style="color:#f5c842">${fmt(tableData[i].portfolio)}</td><td style="color:#4caf50">+${fmt(tableData[i].profit)}</td>`
+      }
+    </tr>`;
+  }
+  document.getElementById('yearTable').innerHTML = tHtml;
+}
+
+function drawChart(lumpData, dcaData, yrs) {
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  canvas.width = W * dpr;
+  canvas.height = 220 * dpr;
+  ctx.scale(dpr, dpr);
+  const cW = W, cH = 220;
+  ctx.clearRect(0,0,cW,cH);
+
+  const pad = {t:20, r:20, b:30, l:65};
+  const w = cW - pad.l - pad.r;
+  const h = cH - pad.t - pad.b;
+
+  let maxVal = Math.max(...lumpData.map(d=>d.portfolio), ...dcaData.map(d=>d.portfolio)) * 1.1;
+
+  ctx.strokeStyle = '#2a2d3e'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const y = pad.t + h - (h * i/4);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+w, y); ctx.stroke();
+    ctx.fillStyle = '#555'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(fmt(maxVal*i/4), pad.l-4, y+4);
+  }
+  ctx.fillStyle = '#555'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  const step = yrs <= 15 ? 1 : Math.ceil(yrs/15);
+  for(let i=0;i<yrs;i++){
+    if(i % step === 0 || i === yrs-1) {
+      const x = pad.l + w * i/(yrs-1);
+      ctx.fillText('Y'+(i+1), x, cH-8);
+    }
+  }
+
+  ctx.beginPath();
+  lumpData.forEach((d,i)=>{
+    const x = pad.l + w*i/(yrs-1);
+    const y = pad.t + h - h*d.totalInvested/maxVal;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle='#444'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+
+  function drawLine(data, color) {
+    ctx.beginPath();
+    data.forEach((d,i)=>{
+      const x = pad.l + w*i/(yrs-1);
+      const y = pad.t + h - h*d.portfolio/maxVal;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.stroke();
+    if(yrs <= 20) {
+      data.forEach((d,i)=>{
+        const x = pad.l + w*i/(yrs-1);
+        const y = pad.t + h - h*d.portfolio/maxVal;
+        ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle=color; ctx.fill();
+      });
+    }
+  }
+
+  if(mode !== 'dca') drawLine(lumpData, '#f5c842');
+  if(mode !== 'lump') drawLine(dcaData, '#4fc3f7');
+
+  let leg = `<div class="legend-item"><div class="dot" style="background:#444"></div><span style="color:#666">累積投入</span></div>`;
+  if(mode !== 'dca') leg += `<div class="legend-item"><div class="dot" style="background:#f5c842"></div><span>單筆投入資產</span></div>`;
+  if(mode !== 'lump') leg += `<div class="legend-item"><div class="dot" style="background:#4fc3f7"></div><span>定期定額資產</span></div>`;
+  document.getElementById('legend').innerHTML = leg;
+}
+
+['annualInvest','startCapital'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById('annualVal').textContent = document.getElementById('annualInvest').value + '萬';
+    document.getElementById('startVal').textContent = document.getElementById('startCapital').value + '萬';
+    calculate();
+  });
+});
+document.getElementById('returnRate').addEventListener('input', () => {
+  document.getElementById('returnVal').textContent = document.getElementById('returnRate').value + '%';
+  calculate();
+});
+document.getElementById('years').addEventListener('input', () => {
+  document.getElementById('yearsVal').textContent = document.getElementById('years').value + '年';
+  calculate();
+});
+window.addEventListener('resize', calculate);
+
+// Init
+onInnerChange();
+</script>
+</body>
+</html>
